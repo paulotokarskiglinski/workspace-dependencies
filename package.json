@@ -15,7 +15,20 @@
         "command": "workspaceDeps.openDashboard",
         "title": "Workspace Dependencies: Open Dashboard"
       }
-    ]
+    ],
+    "configuration": {
+      "title": "Workspace Dependencies Configuration",
+      "properties": {
+        "workspaceDependencies.watchedDirectories": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "description": "Additional directory paths to scan for projects. Can be absolute paths, home relative paths (~), or relative to the workspace root. These folders will be scanned for package.json at their root and one level deep."
+        }
+      }
+    }
   },
   "scripts": {
     "vscode:prepublish": "npm run package",

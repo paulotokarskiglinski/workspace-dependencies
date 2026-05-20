@@ -1,7 +1,45 @@
 import * as vscode from 'vscode';
 import { scanLocalDependencies } from '../scanner';
-import { getPackageJsonFromBranch } from '../gitUtils';
+import { getPackageJsonFromBranch, findGitRoot } from '../gitUtils';
 import * as path from 'path';
+import * as os from 'os';
+import * as fs from 'fs';
+
+/**
+ * Resolves a path, expanding `~` to the home directory, and treating relative paths
+ * as relative to the provided workspaceRoot directory.
+ */
+function resolvePath(p: string, workspaceRoot?: string): string {
+  if (p.startsWith('~')) {
+    p = path.join(os.homedir(), p.slice(1));
+  }
+  if (!path.isAbsolute(p) && workspaceRoot) {
+    p = path.resolve(workspaceRoot, p);
+  }
+  return path.normalize(p);
+}
+
+/**
+ * Determines status (Sync, Mismatch, N/A) based on comparing Current, Dev, and Main branch versions.
+ */
+function getStatus(curr: string, dev: string, main: string): string {
+  if (curr === '-' && dev === '-' && main === '-') {
+    return 'N/A';
+  }
+  const hasDev = dev !== '-';
+  const hasMain = main !== '-';
+
+  if (!hasDev && !hasMain) {
+    return '✅ Sync';
+  }
+  if (!hasDev && hasMain) {
+    return curr === main ? '✅ Sync' : '⚠️ Mismatch';
+  }
+  if (hasDev && !hasMain) {
+    return curr === dev ? '✅ Sync' : '⚠️ Mismatch';
+  }
+  return (curr === dev && curr === main) ? '✅ Sync' : '⚠️ Mismatch';
+}
 
 export class DashboardPanel {
   public static currentPanel: DashboardPanel | undefined;
@@ -68,36 +106,93 @@ export class DashboardPanel {
     this._panel.title = "Scanning...";
     webview.html = this._getHtmlForLoading();
 
-    const workspaceFolders = vscode.workspace.workspaceFolders;
-    if (!workspaceFolders) {
-      webview.html = this._getHtmlForError("No workspace folder open.");
-      this._panel.title = "Workspace Dependencies";
-      return;
-    }
-
-    const targetDir = workspaceFolders[0].uri.fsPath;
-
     try {
-      const projects = await scanLocalDependencies(targetDir);
-      const projectDataList = [];
+      const scanTargets = new Set<string>();
+      const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+      if (workspaceRoot) {
+        scanTargets.add(path.normalize(workspaceRoot));
+      }
 
+      const config = vscode.workspace.getConfiguration('workspaceDependencies');
+      const watchedDirectoriesConfig = config.get<string[]>('watchedDirectories') || [];
+      for (const p of watchedDirectoriesConfig) {
+        if (p.trim()) {
+          const resolved = resolvePath(p.trim(), workspaceRoot);
+          if (fs.existsSync(resolved) && fs.statSync(resolved).isDirectory()) {
+            scanTargets.add(resolved);
+          } else {
+            console.warn(`Watched directory does not exist or is not a directory: ${resolved}`);
+          }
+        }
+      }
+
+      if (scanTargets.size === 0) {
+        webview.html = this._getHtmlForError("No workspace open and no watched directories configured. Please open a workspace or configure 'workspaceDependencies.watchedDirectories'.");
+        this._panel.title = "Workspace Dependencies";
+        return;
+      }
+
+      const allProjects: { project: any; scanRoot: string }[] = [];
+      for (const target of scanTargets) {
+        try {
+          const targetProjects = await scanLocalDependencies(target);
+          for (const tp of targetProjects) {
+            allProjects.push({ project: tp, scanRoot: target });
+          }
+        } catch (scanErr) {
+          console.error(`Failed to scan target ${target}:`, scanErr);
+        }
+      }
+
+      // Deduplicate projects by projectPath
+      const seenPaths = new Set<string>();
+      const deduplicatedProjects = [];
+      for (const item of allProjects) {
+        const normalizedPath = path.normalize(item.project.projectPath);
+        if (!seenPaths.has(normalizedPath)) {
+          seenPaths.add(normalizedPath);
+          deduplicatedProjects.push(item);
+        }
+      }
+
+      const projectDataList = [];
       let mainBranchName = 'origin/main';
       let devBranchName = 'origin/dev';
 
-      for (const project of projects) {
-        const relativeDir = path.relative(targetDir, project.projectPath);
-        const packageJsonRelativePath = relativeDir ? path.join(relativeDir, 'package.json') : 'package.json';
-
-        let mainBranchPkg = await getPackageJsonFromBranch(targetDir, 'origin/main', packageJsonRelativePath);
-        if (!mainBranchPkg) {
-          mainBranchPkg = await getPackageJsonFromBranch(targetDir, 'origin/master', packageJsonRelativePath);
-          if (mainBranchPkg) mainBranchName = 'origin/master';
+      for (const { project, scanRoot } of deduplicatedProjects) {
+        // Compute path display
+        let relativeDir = '';
+        let displayPath = '';
+        if (workspaceRoot && project.projectPath.startsWith(workspaceRoot)) {
+          relativeDir = path.relative(workspaceRoot, project.projectPath);
+          displayPath = relativeDir ? `Workspace/${relativeDir}` : 'Workspace Root';
+        } else {
+          const baseName = path.basename(scanRoot);
+          relativeDir = path.relative(scanRoot, project.projectPath);
+          displayPath = relativeDir ? `${baseName}/${relativeDir}` : baseName;
         }
+        displayPath = displayPath.replace(/\\/g, '/');
 
-        let devBranchPkg = await getPackageJsonFromBranch(targetDir, 'origin/dev', packageJsonRelativePath);
-        if (!devBranchPkg) {
-          devBranchPkg = await getPackageJsonFromBranch(targetDir, 'origin/develop', packageJsonRelativePath);
-          if (devBranchPkg) devBranchName = 'origin/develop';
+        // Git root detection
+        const gitRoot = await findGitRoot(project.projectPath);
+        let mainBranchPkg: any = null;
+        let devBranchPkg: any = null;
+
+        if (gitRoot) {
+          const relativeToGitRoot = path.relative(gitRoot, project.projectPath);
+          const packageJsonRelativePath = relativeToGitRoot ? path.join(relativeToGitRoot, 'package.json') : 'package.json';
+
+          mainBranchPkg = await getPackageJsonFromBranch(gitRoot, 'origin/main', packageJsonRelativePath);
+          if (!mainBranchPkg) {
+            mainBranchPkg = await getPackageJsonFromBranch(gitRoot, 'origin/master', packageJsonRelativePath);
+            if (mainBranchPkg) mainBranchName = 'origin/master';
+          }
+
+          devBranchPkg = await getPackageJsonFromBranch(gitRoot, 'origin/dev', packageJsonRelativePath);
+          if (!devBranchPkg) {
+            devBranchPkg = await getPackageJsonFromBranch(gitRoot, 'origin/develop', packageJsonRelativePath);
+            if (devBranchPkg) devBranchName = 'origin/develop';
+          }
         }
 
         const localPkgMock = { dependencies: project.dependencies, devDependencies: project.devDependencies };
@@ -113,7 +208,7 @@ export class DashboardPanel {
           const devVer = devBranchPkg ? (devBranchPkg.dependencies?.[pkgName] || devBranchPkg.devDependencies?.[pkgName] || '-') : '-';
           const mainVer = mainBranchPkg ? (mainBranchPkg.dependencies?.[pkgName] || mainBranchPkg.devDependencies?.[pkgName] || '-') : '-';
 
-          const status = (localVer === mainVer && localVer === devVer) ? '✅ Sync' : (localVer === '-' && mainVer === '-' && devVer === '-' ? 'N/A' : '⚠️ Mismatch');
+          const status = getStatus(localVer, devVer, mainVer);
 
           if (localVer !== '-' || devVer !== '-' || mainVer !== '-') {
             packagesList.push({
@@ -127,12 +222,13 @@ export class DashboardPanel {
         }
 
         projectDataList.push({
-          name: project.name || (relativeDir || 'Root'),
-          path: relativeDir || 'Root',
+          name: project.name || (relativeDir || path.basename(project.projectPath)),
+          path: displayPath,
           framework: localFw.framework,
           localVersion: localFw.version,
           devVersion: devFw.version,
           mainVersion: mainFw.version,
+          status: getStatus(localFw.version, devFw.version, mainFw.version),
           packages: packagesList
         });
       }
@@ -224,9 +320,10 @@ export class DashboardPanel {
                         <tr>
                             <th>Project Name</th>
                             <th>Framework</th>
-                            <th>Local Version</th>
+                            <th>Current Branch</th>
                             <th>${devBranchName} Version</th>
                             <th>${mainBranchName} Version</th>
+                            <th>Status</th>
                         </tr>
                     </thead>
                     <tbody id="projects-tbody">
@@ -241,7 +338,7 @@ export class DashboardPanel {
                     <thead>
                         <tr>
                             <th>Package Name</th>
-                            <th>Local Version</th>
+                            <th>Current Branch</th>
                             <th>${devBranchName} Version</th>
                             <th>${mainBranchName} Version</th>
                             <th>Status</th>
@@ -272,6 +369,7 @@ export class DashboardPanel {
                         <td>\${project.localVersion}</td>
                         <td>\${project.devVersion}</td>
                         <td>\${project.mainVersion}</td>
+                        <td>\${project.status}</td>
                     \`;
                     listTbody.appendChild(tr);
                 });
