@@ -41,6 +41,21 @@ function getStatus(curr: string, dev: string, main: string): string {
   return (curr === dev && curr === main) ? '✅ Sync' : '⚠️ Mismatch';
 }
 
+/**
+ * Helper to get the union of keys from multiple dependency objects.
+ */
+function getUnionKeys(...objects: (Record<string, any> | undefined | null)[]): string[] {
+  const keys = new Set<string>();
+  for (const obj of objects) {
+    if (obj) {
+      for (const key of Object.keys(obj)) {
+        keys.add(key);
+      }
+    }
+  }
+  return Array.from(keys).sort();
+}
+
 export class DashboardPanel {
   public static currentPanel: DashboardPanel | undefined;
   public static readonly viewType = 'workspaceDepsDashboard';
@@ -200,26 +215,43 @@ export class DashboardPanel {
         const devFw = devBranchPkg ? this._getFrameworkInfo(devBranchPkg) : { framework: localFw.framework, version: '-' };
         const mainFw = mainBranchPkg ? this._getFrameworkInfo(mainBranchPkg) : { framework: localFw.framework, version: '-' };
 
-        const packagesToTrack = ['@angular/core', '@angular/cli', 'typescript', 'rxjs', 'react', 'react-dom', 'vue', 'vite'];
-        const packagesList = [];
+        // Map regular dependencies
+        const depKeys = getUnionKeys(
+          project.dependencies,
+          devBranchPkg?.dependencies,
+          mainBranchPkg?.dependencies
+        );
+        const dependenciesList = depKeys.map(pkgName => {
+          const localVer = project.dependencies[pkgName] || '-';
+          const devVer = devBranchPkg?.dependencies?.[pkgName] || '-';
+          const mainVer = mainBranchPkg?.dependencies?.[pkgName] || '-';
+          return {
+            name: pkgName,
+            local: localVer,
+            dev: devVer,
+            main: mainVer,
+            status: getStatus(localVer, devVer, mainVer)
+          };
+        });
 
-        for (const pkgName of packagesToTrack) {
-          const localVer = project.dependencies[pkgName] || project.devDependencies[pkgName] || '-';
-          const devVer = devBranchPkg ? (devBranchPkg.dependencies?.[pkgName] || devBranchPkg.devDependencies?.[pkgName] || '-') : '-';
-          const mainVer = mainBranchPkg ? (mainBranchPkg.dependencies?.[pkgName] || mainBranchPkg.devDependencies?.[pkgName] || '-') : '-';
-
-          const status = getStatus(localVer, devVer, mainVer);
-
-          if (localVer !== '-' || devVer !== '-' || mainVer !== '-') {
-            packagesList.push({
-              name: pkgName,
-              local: localVer,
-              dev: devVer,
-              main: mainVer,
-              status: status
-            });
-          }
-        }
+        // Map dev dependencies
+        const devDepKeys = getUnionKeys(
+          project.devDependencies,
+          devBranchPkg?.devDependencies,
+          mainBranchPkg?.devDependencies
+        );
+        const devDependenciesList = devDepKeys.map(pkgName => {
+          const localVer = project.devDependencies[pkgName] || '-';
+          const devVer = devBranchPkg?.devDependencies?.[pkgName] || '-';
+          const mainVer = mainBranchPkg?.devDependencies?.[pkgName] || '-';
+          return {
+            name: pkgName,
+            local: localVer,
+            dev: devVer,
+            main: mainVer,
+            status: getStatus(localVer, devVer, mainVer)
+          };
+        });
 
         projectDataList.push({
           name: project.name || (relativeDir || path.basename(project.projectPath)),
@@ -229,7 +261,8 @@ export class DashboardPanel {
           devVersion: devFw.version,
           mainVersion: mainFw.version,
           status: getStatus(localFw.version, devFw.version, mainFw.version),
-          packages: packagesList
+          dependencies: dependenciesList,
+          devDependencies: devDependenciesList
         });
       }
 
@@ -334,6 +367,8 @@ export class DashboardPanel {
             <div id="project-details-view" class="hidden">
                 <button class="back-button" onclick="showProjectList()">⬅️ Back to Projects List</button>
                 <h2 id="details-title">Project Details</h2>
+                
+                <h3>Dependencies</h3>
                 <table>
                     <thead>
                         <tr>
@@ -344,7 +379,22 @@ export class DashboardPanel {
                             <th>Status</th>
                         </tr>
                     </thead>
-                    <tbody id="details-tbody">
+                    <tbody id="dependencies-tbody">
+                    </tbody>
+                </table>
+
+                <h3 style="margin-top: 40px;">Development Dependencies</h3>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Package Name</th>
+                            <th>Current Branch</th>
+                            <th>${devBranchName} Version</th>
+                            <th>${mainBranchName} Version</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody id="devDependencies-tbody">
                     </tbody>
                 </table>
             </div>
@@ -353,7 +403,8 @@ export class DashboardPanel {
                 const projectsData = ${dataJson};
                 
                 const listTbody = document.getElementById('projects-tbody');
-                const detailsTbody = document.getElementById('details-tbody');
+                const dependenciesTbody = document.getElementById('dependencies-tbody');
+                const devDependenciesTbody = document.getElementById('devDependencies-tbody');
                 const listView = document.getElementById('project-list-view');
                 const detailsView = document.getElementById('project-details-view');
                 const detailsTitle = document.getElementById('details-title');
@@ -378,11 +429,12 @@ export class DashboardPanel {
                     const project = projectsData[index];
                     detailsTitle.innerText = \`Dependencies for: \${project.name}\`;
                     
-                    detailsTbody.innerHTML = '';
-                    if (project.packages.length === 0) {
-                        detailsTbody.innerHTML = '<tr><td colspan="5">No tracked packages found.</td></tr>';
+                    // Render dependencies
+                    dependenciesTbody.innerHTML = '';
+                    if (project.dependencies.length === 0) {
+                        dependenciesTbody.innerHTML = '<tr><td colspan="5">No dependencies found.</td></tr>';
                     } else {
-                        project.packages.forEach(pkg => {
+                        project.dependencies.forEach(pkg => {
                             const tr = document.createElement('tr');
                             tr.innerHTML = \`
                                 <td>\${pkg.name}</td>
@@ -391,7 +443,25 @@ export class DashboardPanel {
                                 <td>\${pkg.main}</td>
                                 <td>\${pkg.status}</td>
                             \`;
-                            detailsTbody.appendChild(tr);
+                            dependenciesTbody.appendChild(tr);
+                        });
+                    }
+
+                    // Render devDependencies
+                    devDependenciesTbody.innerHTML = '';
+                    if (project.devDependencies.length === 0) {
+                        devDependenciesTbody.innerHTML = '<tr><td colspan="5">No development dependencies found.</td></tr>';
+                    } else {
+                        project.devDependencies.forEach(pkg => {
+                            const tr = document.createElement('tr');
+                            tr.innerHTML = \`
+                                <td>\${pkg.name}</td>
+                                <td>\${pkg.local}</td>
+                                <td>\${pkg.dev}</td>
+                                <td>\${pkg.main}</td>
+                                <td>\${pkg.status}</td>
+                            \`;
+                            devDependenciesTbody.appendChild(tr);
                         });
                     }
 
