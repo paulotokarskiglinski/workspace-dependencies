@@ -8,6 +8,7 @@ export interface PackageVersion {
 }
 
 export interface ProjectDependencies {
+  name: string;
   projectPath: string;
   dependencies: Record<string, string>;
   devDependencies: Record<string, string>;
@@ -16,10 +17,12 @@ export interface ProjectDependencies {
 /**
  * Scans a given root directory for package.json files and extracts their dependencies.
  */
-export async function scanLocalDependencies(rootDir: string, ignorePatterns: string[] = ['**/node_modules/**']): Promise<ProjectDependencies[]> {
-  const searchPattern = path.join(rootDir, '**', 'package.json').replace(/\\/g, '/');
-
-  const packageFiles = await glob(searchPattern, { ignore: ignorePatterns });
+export async function scanLocalDependencies(rootDir: string, ignorePatterns: string[] = ['**/node_modules/**', '**/dist/**', '**/src/**']): Promise<ProjectDependencies[]> {
+  const packageFiles = await glob(['package.json', '*/package.json'], {
+    cwd: rootDir,
+    absolute: true,
+    ignore: ignorePatterns
+  });
 
   const projects: ProjectDependencies[] = [];
 
@@ -29,6 +32,7 @@ export async function scanLocalDependencies(rootDir: string, ignorePatterns: str
       const pkg = JSON.parse(content);
 
       projects.push({
+        name: pkg.name || path.basename(path.dirname(file)),
         projectPath: path.dirname(file),
         dependencies: pkg.dependencies || {},
         devDependencies: pkg.devDependencies || {}

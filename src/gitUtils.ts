@@ -1,4 +1,19 @@
 import { simpleGit, SimpleGit } from 'simple-git';
+import * as path from 'path';
+
+/**
+ * Finds the nearest Git repository root for a given directory.
+ * Runs `git rev-parse --show-toplevel` within that directory.
+ */
+export async function findGitRoot(dir: string): Promise<string | null> {
+  const git: SimpleGit = simpleGit(dir);
+  try {
+    const toplevel = await git.revparse(['--show-toplevel']);
+    return path.normalize(toplevel.trim());
+  } catch {
+    return null;
+  }
+}
 
 /**
  * Fetches the contents of a package.json file from a specific branch in the repository.
