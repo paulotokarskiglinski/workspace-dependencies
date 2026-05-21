@@ -80,7 +80,10 @@ export class DashboardPanel {
       column || vscode.ViewColumn.One,
       {
         enableScripts: true,
-        localResourceRoots: [vscode.Uri.joinPath(extensionUri, 'dist')]
+        localResourceRoots: [
+          vscode.Uri.joinPath(extensionUri, 'dist'),
+          vscode.Uri.joinPath(extensionUri, 'src', 'assets')
+        ]
       }
     );
 
@@ -109,11 +112,40 @@ export class DashboardPanel {
 
   private _getFrameworkInfo(pkg: any): { framework: string, version: string } {
     const deps = { ...(pkg?.dependencies || {}), ...(pkg?.devDependencies || {}) };
+    
+    if (deps['next']) return { framework: 'Next.js', version: deps['next'] };
+    if (deps['nuxt'] || deps['nuxt3']) return { framework: 'Nuxt.js', version: deps['nuxt'] || deps['nuxt3'] };
+    if (deps['@sveltejs/kit']) return { framework: 'SvelteKit', version: deps['@sveltejs/kit'] };
+    if (deps['svelte']) return { framework: 'Svelte', version: deps['svelte'] };
+    if (deps['ember-source']) return { framework: 'Ember', version: deps['ember-source'] };
+    if (deps['ember-cli']) return { framework: 'Ember', version: deps['ember-cli'] };
+
     if (deps['@angular/core']) return { framework: 'Angular', version: deps['@angular/core'] };
     if (deps['react']) return { framework: 'React', version: deps['react'] };
     if (deps['vue']) return { framework: 'Vue', version: deps['vue'] };
     if (deps['typescript']) return { framework: 'TypeScript', version: deps['typescript'] };
+    
     return { framework: 'JavaScript', version: '-' };
+  }
+
+  private _getFrameworkIconUri(framework: string): string | null {
+    const iconMap: Record<string, string> = {
+      'Angular': 'angular.svg',
+      'React': 'react.svg',
+      'Next.js': 'nextjs.svg',
+      'Nuxt.js': 'nuxtjs.svg',
+      'Svelte': 'svelte.svg',
+      'SvelteKit': 'svelte.svg',
+      'Ember': 'ember.svg',
+      'JavaScript': 'javascript.svg',
+      'TypeScript': 'typescript.svg'
+    };
+    const iconName = iconMap[framework];
+    if (iconName) {
+      const onDiskPath = vscode.Uri.joinPath(this._extensionUri, 'src', 'assets', iconName);
+      return this._panel.webview.asWebviewUri(onDiskPath).toString();
+    }
+    return null;
   }
 
   private async _update() {
@@ -257,6 +289,7 @@ export class DashboardPanel {
           name: project.name || (relativeDir || path.basename(project.projectPath)),
           path: displayPath,
           framework: localFw.framework,
+          frameworkIcon: this._getFrameworkIconUri(localFw.framework),
           localVersion: localFw.version,
           devVersion: devFw.version,
           mainVersion: mainFw.version,
@@ -429,9 +462,12 @@ export class DashboardPanel {
                         const tr = document.createElement('tr');
                         tr.className = 'clickable';
                         tr.onclick = () => showProjectDetails(index);
+                        const iconHtml = project.frameworkIcon 
+                            ? \`<img src="\${project.frameworkIcon}" alt="\${project.framework} logo" style="width: 16px; height: 16px; vertical-align: middle; margin-right: 8px;">\` 
+                            : '';
                         tr.innerHTML = \`
-                            <td><strong>\${project.name}</strong></td>
-                            <td>\${project.framework}</td>
+                            <td><strong>\${project.name}</strong><br><small>\${project.path}</small></td>
+                            <td>\${iconHtml}\${project.framework}</td>
                             <td>\${project.localVersion}</td>
                             <td>\${project.devVersion}</td>
                             <td>\${project.mainVersion}</td>
