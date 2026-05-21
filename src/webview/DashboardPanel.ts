@@ -324,6 +324,13 @@ export class DashboardPanel {
                     background-color: var(--vscode-editor-inactiveSelectionBackground);
                     font-weight: 600;
                 }
+                th.sortable {
+                    cursor: pointer;
+                    user-select: none;
+                }
+                th.sortable:hover {
+                    background-color: var(--vscode-list-hoverBackground);
+                }
                 tr.clickable:hover {
                     background-color: var(--vscode-list-hoverBackground);
                     cursor: pointer;
@@ -348,15 +355,15 @@ export class DashboardPanel {
         <body>
             <div id="project-list-view">
                 <h2>Projects Dashboard</h2>
-                <table>
+                <table id="projects-table">
                     <thead>
                         <tr>
-                            <th>Project Name</th>
-                            <th>Framework</th>
-                            <th>Current Branch</th>
-                            <th>${devBranchName} Version</th>
-                            <th>${mainBranchName} Version</th>
-                            <th>Status</th>
+                            <th data-sort="name" class="sortable" onclick="sortData('projects', 'name')">Project Name</th>
+                            <th data-sort="framework" class="sortable" onclick="sortData('projects', 'framework')">Framework</th>
+                            <th data-sort="localVersion" class="sortable" onclick="sortData('projects', 'localVersion')">Current Branch</th>
+                            <th data-sort="devVersion" class="sortable" onclick="sortData('projects', 'devVersion')">${devBranchName} Version</th>
+                            <th data-sort="mainVersion" class="sortable" onclick="sortData('projects', 'mainVersion')">${mainBranchName} Version</th>
+                            <th data-sort="status" class="sortable" onclick="sortData('projects', 'status')">Status</th>
                         </tr>
                     </thead>
                     <tbody id="projects-tbody">
@@ -369,14 +376,14 @@ export class DashboardPanel {
                 <h2 id="details-title">Project Details</h2>
                 
                 <h3>Dependencies</h3>
-                <table>
+                <table id="dependencies-table">
                     <thead>
                         <tr>
-                            <th>Package Name</th>
-                            <th>Current Branch</th>
-                            <th>${devBranchName} Version</th>
-                            <th>${mainBranchName} Version</th>
-                            <th>Status</th>
+                            <th data-sort="name" class="sortable" onclick="sortData('dependencies', 'name')">Package Name</th>
+                            <th data-sort="local" class="sortable" onclick="sortData('dependencies', 'local')">Current Branch</th>
+                            <th data-sort="dev" class="sortable" onclick="sortData('dependencies', 'dev')">${devBranchName} Version</th>
+                            <th data-sort="main" class="sortable" onclick="sortData('dependencies', 'main')">${mainBranchName} Version</th>
+                            <th data-sort="status" class="sortable" onclick="sortData('dependencies', 'status')">Status</th>
                         </tr>
                     </thead>
                     <tbody id="dependencies-tbody">
@@ -384,14 +391,14 @@ export class DashboardPanel {
                 </table>
 
                 <h3 style="margin-top: 40px;">Development Dependencies</h3>
-                <table>
+                <table id="devDependencies-table">
                     <thead>
                         <tr>
-                            <th>Package Name</th>
-                            <th>Current Branch</th>
-                            <th>${devBranchName} Version</th>
-                            <th>${mainBranchName} Version</th>
-                            <th>Status</th>
+                            <th data-sort="name" class="sortable" onclick="sortData('devDependencies', 'name')">Package Name</th>
+                            <th data-sort="local" class="sortable" onclick="sortData('devDependencies', 'local')">Current Branch</th>
+                            <th data-sort="dev" class="sortable" onclick="sortData('devDependencies', 'dev')">${devBranchName} Version</th>
+                            <th data-sort="main" class="sortable" onclick="sortData('devDependencies', 'main')">${mainBranchName} Version</th>
+                            <th data-sort="status" class="sortable" onclick="sortData('devDependencies', 'status')">Status</th>
                         </tr>
                     </thead>
                     <tbody id="devDependencies-tbody">
@@ -409,27 +416,32 @@ export class DashboardPanel {
                 const detailsView = document.getElementById('project-details-view');
                 const detailsTitle = document.getElementById('details-title');
 
-                // Render project list
-                projectsData.forEach((project, index) => {
-                    const tr = document.createElement('tr');
-                    tr.className = 'clickable';
-                    tr.onclick = () => showProjectDetails(index);
-                    tr.innerHTML = \`
-                        <td><strong>\${project.name}</strong><br><small>\${project.path}</small></td>
-                        <td>\${project.framework}</td>
-                        <td>\${project.localVersion}</td>
-                        <td>\${project.devVersion}</td>
-                        <td>\${project.mainVersion}</td>
-                        <td>\${project.status}</td>
-                    \`;
-                    listTbody.appendChild(tr);
-                });
+                let currentProjectIndex = null;
+                const sortState = {
+                    projects: { column: null, direction: 1 },
+                    dependencies: { column: null, direction: 1 },
+                    devDependencies: { column: null, direction: 1 }
+                };
 
-                function showProjectDetails(index) {
-                    const project = projectsData[index];
-                    detailsTitle.innerText = \`Dependencies for: \${project.name}\`;
-                    
-                    // Render dependencies
+                function renderProjects() {
+                    listTbody.innerHTML = '';
+                    projectsData.forEach((project, index) => {
+                        const tr = document.createElement('tr');
+                        tr.className = 'clickable';
+                        tr.onclick = () => showProjectDetails(index);
+                        tr.innerHTML = \`
+                            <td><strong>\${project.name}</strong></td>
+                            <td>\${project.framework}</td>
+                            <td>\${project.localVersion}</td>
+                            <td>\${project.devVersion}</td>
+                            <td>\${project.mainVersion}</td>
+                            <td>\${project.status}</td>
+                        \`;
+                        listTbody.appendChild(tr);
+                    });
+                }
+
+                function renderDependencies(project) {
                     dependenciesTbody.innerHTML = '';
                     if (project.dependencies.length === 0) {
                         dependenciesTbody.innerHTML = '<tr><td colspan="5">No dependencies found.</td></tr>';
@@ -446,8 +458,9 @@ export class DashboardPanel {
                             dependenciesTbody.appendChild(tr);
                         });
                     }
+                }
 
-                    // Render devDependencies
+                function renderDevDependencies(project) {
                     devDependenciesTbody.innerHTML = '';
                     if (project.devDependencies.length === 0) {
                         devDependenciesTbody.innerHTML = '<tr><td colspan="5">No development dependencies found.</td></tr>';
@@ -464,6 +477,99 @@ export class DashboardPanel {
                             devDependenciesTbody.appendChild(tr);
                         });
                     }
+                }
+
+                function updateHeaderIcons(tableId, column, direction) {
+                    const table = document.getElementById(tableId);
+                    const ths = table.querySelectorAll('th[data-sort]');
+                    ths.forEach(th => {
+                        th.innerText = th.innerText.replace(' 🞁', '').replace(' 🞃', '');
+                        if (th.getAttribute('data-sort') === column) {
+                            th.innerText += direction === 1 ? ' 🞁' : ' 🞃';
+                        }
+                    });
+                }
+
+                function sortData(type, column) {
+                    let dataArray = [];
+                    let renderFn = null;
+                    let tableId = '';
+
+                    if (type === 'projects') {
+                        dataArray = projectsData;
+                        renderFn = renderProjects;
+                        tableId = 'projects-table';
+                    } else if (type === 'dependencies' && currentProjectIndex !== null) {
+                        dataArray = projectsData[currentProjectIndex].dependencies;
+                        renderFn = () => renderDependencies(projectsData[currentProjectIndex]);
+                        tableId = 'dependencies-table';
+                    } else if (type === 'devDependencies' && currentProjectIndex !== null) {
+                        dataArray = projectsData[currentProjectIndex].devDependencies;
+                        renderFn = () => renderDevDependencies(projectsData[currentProjectIndex]);
+                        tableId = 'devDependencies-table';
+                    } else {
+                        return;
+                    }
+
+                    if (sortState[type].column === column) {
+                        sortState[type].direction *= -1;
+                    } else {
+                        sortState[type].column = column;
+                        sortState[type].direction = 1;
+                    }
+
+                    const dir = sortState[type].direction;
+                    dataArray.sort((a, b) => {
+                        let valA = a[column];
+                        let valB = b[column];
+                        if (typeof valA === 'string') valA = valA.toLowerCase();
+                        if (typeof valB === 'string') valB = valB.toLowerCase();
+
+                        if (valA < valB) return -1 * dir;
+                        if (valA > valB) return 1 * dir;
+                        return 0;
+                    });
+
+                    renderFn();
+                    updateHeaderIcons(tableId, column, dir);
+                }
+
+                function showProjectDetails(index) {
+                    currentProjectIndex = index;
+                    const project = projectsData[index];
+                    detailsTitle.innerText = \`Dependencies for: \${project.name}\`;
+                    
+                    // Apply sort state if returning to this view or if changing projects (will apply current sort rule)
+                    if (sortState.dependencies.column) {
+                         const dir = sortState.dependencies.direction;
+                         const col = sortState.dependencies.column;
+                         project.dependencies.sort((a, b) => {
+                             let valA = a[col]; let valB = b[col];
+                             if (typeof valA === 'string') valA = valA.toLowerCase();
+                             if (typeof valB === 'string') valB = valB.toLowerCase();
+                             if (valA < valB) return -1 * dir;
+                             if (valA > valB) return 1 * dir;
+                             return 0;
+                         });
+                    }
+                    if (sortState.devDependencies.column) {
+                         const dir = sortState.devDependencies.direction;
+                         const col = sortState.devDependencies.column;
+                         project.devDependencies.sort((a, b) => {
+                             let valA = a[col]; let valB = b[col];
+                             if (typeof valA === 'string') valA = valA.toLowerCase();
+                             if (typeof valB === 'string') valB = valB.toLowerCase();
+                             if (valA < valB) return -1 * dir;
+                             if (valA > valB) return 1 * dir;
+                             return 0;
+                         });
+                    }
+
+                    renderDependencies(project);
+                    renderDevDependencies(project);
+
+                    updateHeaderIcons('dependencies-table', sortState.dependencies.column, sortState.dependencies.direction);
+                    updateHeaderIcons('devDependencies-table', sortState.devDependencies.column, sortState.devDependencies.direction);
 
                     listView.classList.add('hidden');
                     detailsView.classList.remove('hidden');
@@ -473,6 +579,9 @@ export class DashboardPanel {
                     detailsView.classList.add('hidden');
                     listView.classList.remove('hidden');
                 }
+
+                // Initial render
+                renderProjects();
             </script>
         </body>
         </html>`;
