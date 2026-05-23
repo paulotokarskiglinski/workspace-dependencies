@@ -285,6 +285,12 @@ export class DashboardPanel {
           };
         });
 
+        const frameworkStatus = getStatus(localFw.version, devFw.version, mainFw.version);
+        const hasMismatch = frameworkStatus === '⚠️ Mismatch' || 
+                            dependenciesList.some(dep => dep.status === '⚠️ Mismatch') || 
+                            devDependenciesList.some(dep => dep.status === '⚠️ Mismatch');
+        const overallStatus = hasMismatch ? '⚠️ Mismatch' : '✅ Sync';
+
         projectDataList.push({
           name: project.name || (relativeDir || path.basename(project.projectPath)),
           path: displayPath,
@@ -293,7 +299,7 @@ export class DashboardPanel {
           localVersion: localFw.version,
           devVersion: devFw.version,
           mainVersion: mainFw.version,
-          status: getStatus(localFw.version, devFw.version, mainFw.version),
+          status: overallStatus,
           dependencies: dependenciesList,
           devDependencies: devDependenciesList
         });
@@ -466,7 +472,7 @@ export class DashboardPanel {
                             ? \`<img src="\${project.frameworkIcon}" alt="\${project.framework} logo" style="width: 16px; height: 16px; vertical-align: middle; margin-right: 8px;">\` 
                             : '';
                         tr.innerHTML = \`
-                            <td><strong>\${project.name}</strong><br><small>\${project.path}</small></td>
+                            <td><strong>\${project.name}</strong><br><small>/\${project.path}</small></td>
                             <td>\${iconHtml}\${project.framework}</td>
                             <td>\${project.localVersion}</td>
                             <td>\${project.devVersion}</td>
@@ -573,7 +579,7 @@ export class DashboardPanel {
                 function showProjectDetails(index) {
                     currentProjectIndex = index;
                     const project = projectsData[index];
-                    detailsTitle.innerText = \`Dependencies for: \${project.name}\`;
+                    detailsTitle.innerText = \`\${project.name}\`;
                     
                     // Apply sort state if returning to this view or if changing projects (will apply current sort rule)
                     if (sortState.dependencies.column) {
