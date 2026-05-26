@@ -2,12 +2,23 @@
   "name": "workspace-dependencies",
   "displayName": "Workspace Dependencies",
   "version": "1.0.0",
-  "description": "Track NPM package versions across your workspace and Git branches.",
-  "publisher": "your-name",
+  "description": "Track NPM package versions across multiple projects and branches",
+  "author": "paulotokarskiglinski",
+  "publisher": "paulotokarskiglinski",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/paulotokarskiglinski/workspace-dependencies"
+  },
+  "homepage": "https://github.com/paulotokarskiglinski/workspace-dependencies#readme",
+  "bugs": {
+    "url": "https://github.com/paulotokarskiglinski/workspace-dependencies/issues"
+  },
   "engines": {
     "vscode": "^1.80.0"
   },
   "main": "./dist/extension.js",
+  "icon": "images/icon.png",
   "activationEvents": [],
   "contributes": {
     "commands": [
