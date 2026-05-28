@@ -82,7 +82,7 @@ export class DashboardPanel {
         enableScripts: true,
         localResourceRoots: [
           vscode.Uri.joinPath(extensionUri, 'dist'),
-          vscode.Uri.joinPath(extensionUri, 'src', 'assets')
+          vscode.Uri.joinPath(extensionUri, 'assets')
         ]
       }
     );
@@ -142,7 +142,7 @@ export class DashboardPanel {
     };
     const iconName = iconMap[framework];
     if (iconName) {
-      const onDiskPath = vscode.Uri.joinPath(this._extensionUri, 'src', 'assets', iconName);
+      const onDiskPath = vscode.Uri.joinPath(this._extensionUri, 'assets', iconName);
       return this._panel.webview.asWebviewUri(onDiskPath).toString();
     }
     return null;
