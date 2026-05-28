@@ -19,7 +19,9 @@
   },
   "main": "./dist/extension.js",
   "icon": "images/icon.png",
-  "activationEvents": [],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
   "contributes": {
     "commands": [
       {

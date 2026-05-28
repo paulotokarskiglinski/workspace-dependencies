@@ -9,6 +9,14 @@ export function activate(context: vscode.ExtensionContext) {
   });
 
   context.subscriptions.push(disposable);
+
+  const statusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
+  statusBarItem.command = 'workspaceDeps.openDashboard';
+  statusBarItem.text = '$(versions)';
+  statusBarItem.tooltip = 'Open Workspace Dependencies Dashboard';
+  statusBarItem.show();
+
+  context.subscriptions.push(statusBarItem);
 }
 
 export function deactivate() { }
