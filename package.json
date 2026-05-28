@@ -1,7 +1,7 @@
 {
   "name": "workspace-dependencies",
   "displayName": "Workspace Dependencies",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Track NPM package versions across multiple projects and branches",
   "author": "paulotokarskiglinski",
   "publisher": "paulotokarskiglinski",
